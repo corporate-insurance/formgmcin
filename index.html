@@ -104,7 +104,9 @@ button:disabled{opacity:.6;cursor:default}
 <div class="wrap" id="tb" style="margin-top:12px"></div></div>
 </main>
 <script>
-const SCRIPT_URL="/api"; // served by the same Node server
+// ====== PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE ======
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbzgCUFS6DA0kGXomf8H3kptldvcPQrZRgEEYOiHEE_gdGSoykQnWZL5l6QuhOlHo7qL/exec";
+// ============================================================
 const q=new URLSearchParams(location.search);
 const SU=SCRIPT_URL;
 const camp=(q.get("c")||"").trim().slice(0,60);
@@ -160,8 +162,7 @@ $("sub").onclick=async()=>{
  if(!SU||SU.startsWith("PASTE")){msg("Portal is not configured yet. Please contact APNA Insurance.","er");return}
  const b=$("sub");b.disabled=true;msg("Submitting…");
  try{
-  const r=await fetch(SU,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({company:camp,empId:o.eid,rows:rowsFor(o)})});
-  const d=await r.json().catch(()=>({}));if(!r.ok||d.error){msg(d.error||"Could not submit. Please try again.","er");b.disabled=false;return}
+  await fetch(SU,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({company:camp,empId:o.eid,rows:rowsFor(o)})});
   msg("Submitted successfully. Thank you! You may resubmit with the same Emp ID to update.","ok")
  }catch(e){msg("Could not submit. Please check your internet and try again.","er")}
  b.disabled=false};
@@ -171,9 +172,12 @@ const ST={get(k){try{return localStorage.getItem(k)||""}catch(e){return""}},set(
 $("akey").value=ST.get("gmc_key");
 function am(t){$("amsg").textContent=t}
 function lm(t){$("lmsg").textContent=t}
-function api(p){const u=new URL(SU,location.origin);for(const k in p)u.searchParams.set(k,p[k]);
- return fetch(u,{headers:{"x-admin-key":$("akey").value.trim()}}).then(async r=>{const t=await r.text();try{return JSON.parse(t)}catch(e){throw new Error("NOT_JSON")}})}
-function errMsg(e){return"Could not reach the server. Check that the app is running and try again."}
+function api(p){const u=new URL(SU);u.searchParams.set("key",$("akey").value.trim());for(const k in p)u.searchParams.set(k,p[k]);
+ return fetch(u,{redirect:"follow"}).then(async r=>{const t=await r.text();try{return JSON.parse(t)}catch(e){throw new Error(t.trim().startsWith("<")?"NOT_JSON_HTML":"NOT_JSON")}})}
+function errMsg(e){const m=e&&e.message||"";
+ if(m==="NOT_JSON_HTML")return"Script returned a web page instead of data. In Apps Script: Deploy > Manage deployments > edit > Version: New version, Who has access: Anyone. Then use the new /exec URL.";
+ if(m==="NOT_JSON")return"Script replied with something unexpected. Make sure the latest Code.gs is deployed as a NEW version.";
+ return"Could not reach the script (network/CORS). Check the Web app URL and that access is set to Anyone."}
 function linkFor(n){return location.origin+location.pathname+"?c="+encodeURIComponent(n)}
 function csv(rows){return"\ufeff"+rows.map(r=>r.map(v=>{v=String(v==null?"":v);if(/^[=+\-@\t\r]/.test(v)&&!/^-?\d+(\.\d+)?$/.test(v))v="'"+v;return'"'+v.replace(/"/g,'""')+'"'}).join(",")).join("\r\n")}
 function dl(name,text){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv;charset=utf-8"}));a.download=name;document.body.append(a);a.click();a.remove()}
@@ -183,7 +187,7 @@ $("mkl").onclick=()=>{
  am(location.protocol==="file:"?"Link created, but this page is opened from your computer. Upload the page to a website (e.g. Netlify) and generate the link from there, or it will not open for employees.":"Link created.")};
 $("cp").onclick=async()=>{$("lk").select();try{await navigator.clipboard.writeText($("lk").value);$("cp").textContent="Copied"}catch(e){$("cp").textContent="Press Ctrl+C"}};
 async function load(){
- if(!SU||SU.startsWith("PASTE")){lm("API is not configured.");return}
+ if(!SU||SU.startsWith("PASTE")){lm("Web app URL is not set in the HTML file.");return}
  ST.set("gmc_key",$("akey").value.trim());lm("Loading…");
  try{
   const d=await api({action:"list"});
