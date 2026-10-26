@@ -187,13 +187,11 @@ async function load(){
  try{
   const d=await api({action:"list"});
   if(d.error){lm(d.error==="unauthorized"?"Wrong admin key.":d.error);return}
-  const t=mk("table"),hr=mk("tr");["Customer","Employees submitted","Total lives","Link",""].forEach(x=>hr.append(mk("th",{textContent:x})));t.append(hr);
+  const t=mk("table"),hr=mk("tr");["Company Name","Entries","Download CSV file"].forEach(x=>hr.append(mk("th",{textContent:x})));t.append(hr);
   d.companies.forEach(c=>{
-   const lk=linkFor(c.name),inp=mk("input",{className:"lk",readOnly:true,value:lk});
-   const cp=mk("button",{textContent:"Copy link"});cp.onclick=async()=>{inp.select();try{await navigator.clipboard.writeText(lk);cp.textContent="Copied"}catch(e){cp.textContent="Press Ctrl+C"}};
-   const x=mk("button",{className:"p",textContent:"Download Excel/CSV"});
+   const x=mk("button",{className:"p",textContent:"Download CSV"});
    x.onclick=async()=>{if(!c.employees){lm("No submissions yet for "+c.name);return}x.disabled=true;try{const r=await api({action:"data",c:c.name});if(r.error)lm(r.error);else dl("GMC_"+c.name.replace(/[^A-Za-z0-9]+/g,"_")+".csv",csv(r.rows))}catch(e){lm("Download failed.")}x.disabled=false};
-   const r=mk("tr");r.append(mk("td",{textContent:c.name}),mk("td",{textContent:String(c.employees)}),mk("td",{textContent:String(c.lives)}),mk("td",0,[inp]),mk("td",0,[mk("div",{className:"row"},[cp,x])]));t.append(r)});
+   const r=mk("tr");r.append(mk("td",{textContent:c.name}),mk("td",{textContent:String(c.employees)}),mk("td",0,[x]));t.append(r)});
   $("tb").replaceChildren(d.companies.length?t:mk("p",{className:"sm",textContent:"No submissions yet."}));
   lm("Loaded "+d.companies.length+" customer(s).")
  }catch(e){lm("Could not load. Check the Web app URL and that the script is deployed with access: Anyone.")}}
