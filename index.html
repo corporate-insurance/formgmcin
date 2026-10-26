@@ -92,7 +92,7 @@ button:disabled{opacity:.6;cursor:default}
 </div>
 
 <div class="card" id="adm" style="display:none"><h2>Admin – create collection link</h2>
-<p class="sm">Enter the customer / company name. Send the generated link to that company's employees. Each company gets its own tab in your Google Sheet.</p>
+<p class="sm">Enter the customer / company name. Send the generated link to that company's employees. Each company gets its own CSV file in your Google Drive folder.</p>
 <div class="g"><div><label>Customer / Company name</label><input id="cname" placeholder="e.g. ABC Pvt Ltd"></div></div>
 <div class="row"><button class="p" id="mkl">Generate link</button></div>
 <div id="lkw" style="display:none;margin-top:12px"><label>Link for employees</label><input id="lk" readonly><div class="row"><button id="cp">Copy link</button></div></div>
@@ -105,7 +105,7 @@ button:disabled{opacity:.6;cursor:default}
 </main>
 <script>
 // ====== PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE ======
-const SCRIPT_URL="https://script.google.com/macros/s/AKfycbzgCUFS6DA0kGXomf8H3kptldvcPQrZRgEEYOiHEE_gdGSoykQnWZL5l6QuhOlHo7qL/exec";
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbwsvoYUaItQCbCh_I73jVZMiXvpt9MtgBddPqmTIaCG34j9p1MqQeQm71-AC6DFD1Ql/exec";
 // ============================================================
 const q=new URLSearchParams(location.search);
 const SU=SCRIPT_URL;
@@ -174,11 +174,17 @@ function am(t){$("amsg").textContent=t}
 function lm(t){$("lmsg").textContent=t}
 function api(p){const u=new URL(SU);u.searchParams.set("key",$("akey").value.trim());for(const k in p)u.searchParams.set(k,p[k]);
  return fetch(u,{redirect:"follow"}).then(async r=>{const t=await r.text();try{return JSON.parse(t)}catch(e){throw new Error(t.trim().startsWith("<")?"NOT_JSON_HTML":"NOT_JSON")}})}
-function errMsg(e){const m=e&&e.message||"";
+function errMsg(e){const m=e&&e.message||String(e);
  if(m==="NOT_JSON_HTML")return"Script returned a web page instead of data. In Apps Script: Deploy > Manage deployments > edit > Version: New version, Who has access: Anyone. Then use the new /exec URL.";
  if(m==="NOT_JSON")return"Script replied with something unexpected. Make sure the latest Code.gs is deployed as a NEW version.";
- return"Could not reach the script (network/CORS). Check the Web app URL and that access is set to Anyone."}
+ if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Could not reach the script (network/CORS). Check the Web app URL and that access is set to Anyone.";
+ return"Error: "+m}
 function linkFor(n){return location.origin+location.pathname+"?c="+encodeURIComponent(n)}
+function toRows(r){let x=r&&(r.rows||r.data||r.values);if(typeof x==="string"){try{x=JSON.parse(x)}catch(e){}}
+ if(!Array.isArray(x)||!x.length)return[];
+ if(Array.isArray(x[0]))return x;
+ if(x[0]&&typeof x[0]==="object"){const k=Object.keys(x[0]);return[k].concat(x.map(o=>k.map(c=>o[c])))}
+ return x.map(v=>[v])}
 function csv(rows){return"\ufeff"+rows.map(r=>r.map(v=>{v=String(v==null?"":v);if(/^[=+\-@\t\r]/.test(v)&&!/^-?\d+(\.\d+)?$/.test(v))v="'"+v;return'"'+v.replace(/"/g,'""')+'"'}).join(",")).join("\r\n")}
 function dl(name,text){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type:"text/csv;charset=utf-8"}));a.download=name;document.body.append(a);a.click();a.remove()}
 $("mkl").onclick=()=>{
@@ -192,11 +198,23 @@ async function load(){
  try{
   const d=await api({action:"list"});
   if(d.error){lm(d.error==="unauthorized"?"Wrong admin key.":d.error);return}
-  const t=mk("table"),hr=mk("tr");["Company Name","Entries","Download CSV file"].forEach(x=>hr.append(mk("th",{textContent:x})));t.append(hr);
+  const t=mk("table"),hr=mk("tr");["Company Name","Entries","Download CSV file","Delete"].forEach(x=>hr.append(mk("th",{textContent:x})));t.append(hr);
   d.companies.forEach(c=>{
    const x=mk("button",{className:"p",textContent:"Download CSV"});
-   x.onclick=async()=>{if(!c.employees){lm("No submissions yet for "+c.name);return}x.disabled=true;lm("Preparing "+c.name+"…");try{const r=await api({action:"data",c:c.name});if(r.error){lm(r.error==="unauthorized"?"Wrong admin key.":r.error)}else if(!r.rows||!r.rows.length){lm("No rows returned for "+c.name)}else{dl("GMC_"+c.name.replace(/[^A-Za-z0-9]+/g,"_")+".csv",csv(r.rows));lm("Downloaded "+c.name+".")}}catch(e){lm(errMsg(e))}x.disabled=false};
-   const r=mk("tr");r.append(mk("td",{textContent:c.name}),mk("td",{textContent:String(c.employees)}),mk("td",0,[x]));t.append(r)});
+   x.onclick=async()=>{if(!c.employees){lm("No submissions yet for "+c.name);return}x.disabled=true;lm("Preparing "+c.name+"…");
+    let r;try{r=await api({action:"data",c:c.name})}catch(e){lm(errMsg(e));x.disabled=false;return}
+    try{if(r.error){lm(r.error==="unauthorized"?"Wrong admin key.":String(r.error))}
+     else{const rows=toRows(r);if(!rows.length)lm("No rows returned for "+c.name);else{dl("GMC_"+c.name.replace(/[^A-Za-z0-9]+/g,"_")+".csv",csv(rows));lm("Downloaded "+c.name+" ("+rows.length+" rows).")}}}
+    catch(e){lm(errMsg(e))}
+    x.disabled=false};
+   const dc=mk("button",{textContent:"Delete company"});
+   dc.onclick=async()=>{if(!confirm('Delete ALL data for "'+c.name+'"? This cannot be undone.'))return;if(prompt('Type the company name to confirm:')!==c.name){lm("Cancelled – name did not match.");return}
+    dc.disabled=true;try{const r=await api({action:"delete_company",c:c.name});if(r.error){lm(r.error==="unauthorized"?"Wrong admin key.":String(r.error));dc.disabled=false}else{lm('Deleted "'+c.name+'".');load()}}catch(e){lm(errMsg(e));dc.disabled=false}};
+   const ei=mk("input",{placeholder:"Emp ID",style:"width:90px;margin-right:6px"});
+   const de=mk("button",{textContent:"Delete employee"});
+   de.onclick=async()=>{const id=ei.value.trim();if(!id){lm("Enter the Emp ID to delete.");return}if(!confirm("Delete Emp ID "+id+" (and dependants) from "+c.name+"?"))return;
+    de.disabled=true;try{const r=await api({action:"delete_emp",c:c.name,id:id});if(r.error){lm(r.error==="unauthorized"?"Wrong admin key.":String(r.error))}else if(!r.deleted){lm("Emp ID "+id+" not found in "+c.name+".")}else{lm("Deleted Emp ID "+id+" ("+r.deleted+" rows).");load()}}catch(e){lm(errMsg(e))}de.disabled=false};
+   const r=mk("tr");r.append(mk("td",{textContent:c.name}),mk("td",{textContent:String(c.employees)}),mk("td",0,[x]),mk("td",0,[mk("div",{className:"row"},[dc,ei,de])]));t.append(r)});
   $("tb").replaceChildren(d.companies.length?t:mk("p",{className:"sm",textContent:"No submissions yet."}));
   lm("Loaded "+d.companies.length+" customer(s).")
  }catch(e){lm(errMsg(e))}}
