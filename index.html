@@ -177,7 +177,7 @@ function api(p){const u=new URL(SU);u.searchParams.set("key",$("akey").value.tri
 function errMsg(e){const m=e&&e.message||String(e);
  if(m==="NOT_JSON_HTML")return"Script returned a web page instead of data. In Apps Script: Deploy > Manage deployments > edit > Version: New version, Who has access: Anyone. Then use the new /exec URL.";
  if(m==="NOT_JSON")return"Script replied with something unexpected. Make sure the latest Code.gs is deployed as a NEW version.";
- if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Could not reach the script (network/CORS). Check the Web app URL and that access is set to Anyone.";
+ if(/Failed to fetch|NetworkError|Load failed/i.test(m))return"Could not reach the script ("+m+"). Check the Web app URL and that access is set to Anyone.";
  return"Error: "+m}
 function linkFor(n){return location.origin+location.pathname+"?c="+encodeURIComponent(n)}
 function toRows(r){let x=r&&(r.rows||r.data||r.values);if(typeof x==="string"){try{x=JSON.parse(x)}catch(e){}}
@@ -202,7 +202,7 @@ async function load(){
   d.companies.forEach(c=>{
    const x=mk("button",{className:"p",textContent:"Download CSV"});
    x.onclick=async()=>{if(!c.employees){lm("No submissions yet for "+c.name);return}x.disabled=true;lm("Preparing "+c.name+"…");
-    let r;try{r=await api({action:"data",c:c.name})}catch(e){lm(errMsg(e));x.disabled=false;return}
+    let r;if(c.rows&&c.rows.length){r={rows:c.rows}}else{try{r=await api({action:"data",c:c.name})}catch(e){console.error(e);lm(errMsg(e));x.disabled=false;return}}
     try{if(r.error){lm(r.error==="unauthorized"?"Wrong admin key.":String(r.error))}
      else{const rows=toRows(r);if(!rows.length)lm("No rows returned for "+c.name);else{dl("GMC_"+c.name.replace(/[^A-Za-z0-9]+/g,"_")+".csv",csv(rows));lm("Downloaded "+c.name+" ("+rows.length+" rows).")}}}
     catch(e){lm(errMsg(e))}
